@@ -1,1 +1,1 @@
-export { };
+export * from './api/tarefas/TarefasService';

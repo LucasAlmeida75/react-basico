@@ -1,14 +1,22 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-
-interface IListaProps {
-    title: string;
-    isSelected: boolean;
-}
+import { IListaProps, TarefasService } from "../../shared/services";
+import { ApiException } from "../../shared/services/api/ApiException";
 
 export const List = () => {
     const [lista, setLista] = useState<string[]>([]);
     const [listaObjeto, setListaObjeto] = useState<IListaProps[]>([]);
+
+    useEffect(() => {
+        TarefasService.getAll()
+        .then((result) => {
+            if (result instanceof ApiException) {
+                alert(result.message);
+            } else {
+                setListaObjeto(result);
+            }
+        });
+    }, []);
 
     const handleInputKeyUp: React.KeyboardEventHandler<HTMLInputElement> = useCallback((e) => {
         if (e.key === 'Enter') {
@@ -31,32 +39,66 @@ export const List = () => {
 
             const value = e.currentTarget.value;
 
-            setListaObjeto((oldLista) => {
-                if (oldLista.some((listItem) => listItem.title === value)) return oldLista;
+            const dataToCreate = {
+                title: value,
+                isCompleted: false
+            }
 
-                return [...oldLista, {
-                    title: value,
-                    isSelected: false
-                }];
+            if (listaObjeto.some((listItem) => listItem.title === value)) return;
+
+            TarefasService.create(dataToCreate)
+            .then((result) => {
+                if (result instanceof ApiException) {
+                    alert(result.message);
+                } else {
+                    setListaObjeto((oldLista) => [...oldLista, result]);
+                }
             });
+
             e.currentTarget.value = "";
         }
-    }, []);
+    }, [listaObjeto]);
 
-    const handleCheckbox = useCallback( (e: string) => {
-            setListaObjeto((oldLista) => {
-                //Itera toda a lista para alterar o valor de uma linha
-                return oldLista.map((oldListItem) => {
-                    //Se o title do valor atual for igual ao title da linha da checkbox ele altera o isSelected, senão mantém o que tiver
-                    const newIsSelected = oldListItem.title === e ? !oldListItem.isSelected : oldListItem.isSelected;
-                    return {
-                        ...oldListItem,
-                        isSelected: newIsSelected
-                    }
-                });
-            });
-        }
-    , [])
+    const handleCheckbox = useCallback( (id: number) => {
+        const dataToUpdate = listaObjeto.find((tarefa) => tarefa.id === id);
+
+        if (!dataToUpdate) return;
+
+        TarefasService.updateById(id, {
+            ...dataToUpdate,
+            isCompleted: !dataToUpdate.isCompleted
+        })
+        .then((result) => {
+            if (result instanceof ApiException) {
+                alert(result.message);
+            } else {
+                setListaObjeto(oldLista => {
+                    return oldLista.map(oldListaItem => {
+                        if (oldListaItem.id === id) return result;
+
+                        return oldListaItem;
+                    })
+                })
+            }
+        });
+    }, [listaObjeto]);
+
+    const handleDelete = useCallback( (id: number) => {
+        const confirm = window.confirm('Tem certeza que deseja apagar a tarefa?');
+
+        if (!confirm) return;
+
+        TarefasService.deleteById(id)
+        .then((result) => {
+            if (result instanceof ApiException) {
+                alert(result.message);
+            } else {
+                setListaObjeto(oldLista => {
+                    return oldLista.filter(oldListaItem => oldListaItem.id !== id)
+                })
+            }
+        });
+    }, []);
 
     return (
         <div>
@@ -77,14 +119,15 @@ export const List = () => {
 
 
             <p>Lista de objetos com checkbox</p>
-            <p>{listaObjeto.filter((listItem) => listItem.isSelected).length}</p>
+            <p>{listaObjeto.filter((listItem) => listItem.isCompleted).length}</p>
             <input type="text" onKeyUp={handleInputObjeto} />
 
             <ul>
-                {listaObjeto.map((listItem, index) => {
-                    return <li key={listItem.title}>
-                                <input type="checkbox" onChange={() => {handleCheckbox(listItem.title)}}/>
+                {listaObjeto.map((listItem) => {
+                    return <li key={listItem.id}>
+                                <input type="checkbox" checked={listItem.isCompleted} onChange={() => {handleCheckbox(listItem.id)}}/>
                                 {listItem.title}
+                                <button onClick={() => {handleDelete(listItem.id)}}>Apagar</button>
                             </li>;
                 })}
             </ul>
